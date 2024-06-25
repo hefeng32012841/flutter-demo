@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:flutter/services.dart';
 //import 'package:webview_flutter/webview_flutter.dart';
 
 void main() async {
@@ -15,6 +16,8 @@ void main() async {
   if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
     await InAppWebViewController.setWebContentsDebuggingEnabled(true);
   }
+
+  Permission.microphone.request();
 
   runApp(MyInAppWebView());
 }
@@ -26,8 +29,6 @@ Future<void> requestMicrophonePermission() async {
   }
 }
 
-RTCVideoRenderer audioRenderer = RTCVideoRenderer();
-
 class MyInAppWebView extends StatefulWidget {
   @override
   _MyInAppWebViewState createState() => new _MyInAppWebViewState();
@@ -36,8 +37,6 @@ class MyInAppWebView extends StatefulWidget {
 class _MyInAppWebViewState extends State<MyInAppWebView> {
   InAppWebViewController? webView;
   RTCPeerConnection? peerConnection;
-  List<MediaDeviceInfo> _devices = [];
-  final RTCVideoRenderer audioRenderer = RTCVideoRenderer();
   MediaStream? _localStream;
   final Map<String, dynamic> config = {
     'sdpSemantics': 'unified-plan',
@@ -53,75 +52,80 @@ class _MyInAppWebViewState extends State<MyInAppWebView> {
     ],
   };
 
+  static const platform = MethodChannel('com.example.audio');
 
-
-  Future<void> loadDevices() async {
-    var devices = await navigator.mediaDevices.enumerateDevices();
-    print("输出设备1: ${devices}");
-
-    var output = _devices.where((device) => device.kind == 'audiooutput').toList();
-    print("输出设备2: ${output}");
-    setState(() {
-      _devices = devices;
-    });
+  Future<void> changeAudioOutput(String output) async {
+    try {
+      await platform.invokeMethod('changeAudioOutput', {"output": output});
+    } on PlatformException catch (e) {
+      print("Failed to change audio output: ${e.message}");
+    }
   }
 
   @override
   void initState() {
     super.initState();
-    loadDevices();
-    navigator.mediaDevices.ondevicechange = (event) {
-      loadDevices();
-    };
   }
+
 
   Future<void> createRTC() async {
     peerConnection = await createPeerConnection(config, constraints);
+    //changeAudioOutput('speaker');
 
-    peerConnection?.onTrack = (RTCTrackEvent event) async {
-      print("来自Web的消息 onAddStream: ${event}");
+    peerConnection?.onTrack = (RTCTrackEvent e) async {
+      var stream = e.streams[0];
+      print("来自Web的消息 onTrack: ${e}");
+
+      print('Audio tracks: ${stream.getAudioTracks()}');
+      for (var track in stream.getAudioTracks()) {
+        print('Track enabled: ${track.enabled}');
+        print('Track label: ${track.label}');
+        print('Track kind: ${track.kind}');
+        print('Track: ${track}');
+      }
+      //final RTCVideoRenderer audioRenderer = RTCVideoRenderer();
       //_localStream = stream;
-      // if (stream.getAudioTracks().isNotEmpty) {
-      //
-      //   // 获取音频轨
-      //   MediaStreamTrack audioTrack = stream.getAudioTracks().first;
-      //   print("来自native的消息 非空: ${audioTrack}");
-      //
-      //   // 处理音频轨，例如显示音量条或者创建一个新的 UI 组件
-      //   // 注意：音频会自动播放，不需要额外的视频或音频组件
-      // }
-      // Do something with the received audio stream
-      // await audioRenderer.initialize();
-      await audioRenderer.initialize();
-      audioRenderer.audioOutput('earpiece');
-      audioRenderer.srcObject = event.streams[0];
-      // MediaStreamTrack audioTrack = stream.getAudioTracks().first;
-      // audioTrack.onEnded = void (e) {
-      //
-      // }
-      // if (audioTrack != null) {
-      //   audioTrack.enabled = true;
-      //   print("来自Web的消息 onAddStream: ${audioTrack.toString()}");
+      //if (stream.getAudioTracks().isNotEmpty) {
+
+      //  // 获取音频轨
+      //  MediaStreamTrack audioTrack = stream.getAudioTracks().first;
+      //  print("来自native的消息 非空: ${audioTrack}");
+
+      //  // 处理音频轨，例如显示音量条或者创建一个新的 UI 组件
+      //  // 注意：音频会自动播放，不需要额外的视频或音频组件
+      //}
+      //// Do something with the received audio stream
+      //// await audioRenderer.initialize();
+      //await audioRenderer.initialize();
+      //audioRenderer.srcObject = stream;
+      //// MediaStreamTrack audioTrack = stream.getAudioTracks().first;
+      //// audioTrack.onEnded = void (e) {
+      ////
+      //// }
+      //// if (audioTrack != null) {
+      ////   audioTrack.enabled = true;
+      ////   print("来自Web的消息 onAddStream: ${audioTrack.toString()}");
       // }
     };
 
-    peerConnection?.onIceCandidate = (RTCIceCandidate candidate) {
-      Map<String, dynamic> candidateMap = {
-        'candidate': candidate.candidate,
-        'sdpMid': candidate.sdpMid,
-        'sdpMLineIndex': candidate.sdpMLineIndex,
-      };
+    peerConnection?.onIceCandidate = (e) {
+      if (e.candidate != null) {
+        Map<String, dynamic> candidateMap = {
+          'candidate': e.candidate,
+          'sdpMid': e.sdpMid,
+          'sdpMLineIndex': e.sdpMLineIndex,
+        };
 
-      String jsonString = json.encode(candidateMap);
-      print("来自fluter的消息 onIceCandidate: ${jsonString}");
-      sendMessageToWebView(jsonString);
+        String jsonString = json.encode(candidateMap);
+        print("来自fluter的消息 onIceCandidate: ${jsonString}");
+        sendMessageToWebView(jsonString);
+      }
     };
   }
 
   void closeRTC() async {
     _localStream?.dispose();
     _localStream = null;
-    audioRenderer.srcObject = null;
     await peerConnection?.close();
     peerConnection = null;
   }
@@ -130,10 +134,6 @@ class _MyInAppWebViewState extends State<MyInAppWebView> {
     await webView?.evaluateJavascript(
       source: "window.receiveMessageFromFlutter('${params}');",
     );
-  }
-
-  void addIce() {
-
   }
 
   Future<Map<String, dynamic>> remoteOffer(Map offer) async {
@@ -146,7 +146,6 @@ class _MyInAppWebViewState extends State<MyInAppWebView> {
       offer['type'],
     );
     await peerConnection?.setRemoteDescription(description);
-    addIce();
 
     dynamic answer = await peerConnection?.createAnswer({'offerToReceiveAudio': true, 'offerToReceiveVideo': false});
     await peerConnection?.setLocalDescription(answer);
@@ -160,20 +159,17 @@ class _MyInAppWebViewState extends State<MyInAppWebView> {
 
   void remoteAddIceCandidate(Map candidateJson) async {
     print("开始 remoteAddIceCandidate");
-    if (candidateJson != null && candidateJson.isNotEmpty) {
-      RTCIceCandidate candidate = RTCIceCandidate(
-        candidateJson['candidate'],
-        candidateJson['sdpMid'],
-        candidateJson['sdpMLineIndex'],
-      );
-      await peerConnection?.addCandidate(candidate);
-    }
+    RTCIceCandidate candidate = RTCIceCandidate(
+      candidateJson['candidate'],
+      candidateJson['sdpMid'],
+      candidateJson['sdpMLineIndex'],
+    );
+    await peerConnection?.addCandidate(candidate);
     print("结束 remoteAddIceCandidate");
   }
 
   @override
   Widget build(BuildContext context) {
-    requestMicrophonePermission();
     return Column(
       children: <Widget>[
         Container(
@@ -191,8 +187,9 @@ class _MyInAppWebViewState extends State<MyInAppWebView> {
                 isInspectable: kDebugMode,
                 mediaPlaybackRequiresUserGesture: false,
                 allowsInlineMediaPlayback: true,
-                iframeAllow: "camera; microphone",
-                iframeAllowFullscreen: true
+                iframeAllow: "microphone",
+                iframeAllowFullscreen: true,
+                allowBackgroundAudioPlaying: true
               ),
               onPermissionRequest: (controller, request) async {
                 return PermissionResponse(
@@ -223,7 +220,6 @@ class _MyInAppWebViewState extends State<MyInAppWebView> {
               },
               onWebViewCreated: (InAppWebViewController controller) {
                 webView = controller;
-
                 controller.addJavaScriptHandler(
                   handlerName: 'createRTC',
                   callback: (List<dynamic> args) {

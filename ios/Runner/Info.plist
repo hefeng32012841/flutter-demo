@@ -32,6 +32,7 @@
     <array>
     	<string>fetch</string>
     	<string>remote-notification</string>
+    	<string>audio</string>
     </array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
@@ -62,6 +63,8 @@
     <true/>
 	</dict>
 	<key>io.flutter.embedded_views_preview</key>
-	<string>YES</string>
+	<true/>
+	<key>allowsInlineMediaPlayback</key>
+	<true/>
 </dict>
 </plist>
