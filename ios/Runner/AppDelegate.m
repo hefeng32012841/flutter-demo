@@ -42,16 +42,18 @@
     AVAudioSession *audioSession = [AVAudioSession sharedInstance];
 
     NSError *error = nil;
-    [audioSession setCategory:AVAudioSessionCategoryPlayAndRecord
-                  withOptions:AVAudioSessionCategoryOptionAllowBluetooth | AVAudioSessionCategoryOptionAllowBluetoothA2DP
+    [audioSession setCategory:AVAudioSessionCategoryPlayback
+                  withOptions:AVAudioSessionCategoryOptionMixWithOthers
+                  // withOptions:AVAudioSessionCategoryOptionDefaultToSpeaker
                         error:&error];
-    [audioSession setMode:AVAudioSessionModeDefault error:&error];
+    [audioSession setMode:AVAudioSessionModeVoiceChat error:&error];
 
     if (error) {
         NSLog(@"Failed to configure audio session: %@", error);
     }
 
     [audioSession setActive:YES error:&error];
+    [self switchToEarPiece];
 }
 
 - (void)changeAudioOutput:(NSString*)output result:(FlutterResult)result {
@@ -71,6 +73,17 @@
                                    details:error.localizedDescription]);
     } else {
         result(nil);
+    }
+}
+
+- (void)switchToEarPiece {
+    NSError *error = nil;
+    [[UIDevice currentDevice] setProximityMonitoringEnabled:YES];
+    [[AVAudioSession sharedInstance] overrideOutputAudioPort:AVAudioSessionPortOverrideNone error:&error];
+    if (error) {
+        NSLog(@"切换到耳机时出错: %@", error.localizedDescription);
+    } else {
+        NSLog(@"已切换到耳机");
     }
 }
 

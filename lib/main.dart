@@ -13,11 +13,11 @@ import 'package:flutter/services.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-    await InAppWebViewController.setWebContentsDebuggingEnabled(true);
-  }
+  // if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+  //   await InAppWebViewController.setWebContentsDebuggingEnabled(true);
+  // }
 
-  Permission.microphone.request();
+  // Permission.microphone.request();
 
   runApp(MyInAppWebView());
 }
@@ -52,19 +52,26 @@ class _MyInAppWebViewState extends State<MyInAppWebView> {
     ],
   };
 
-  static const platform = MethodChannel('com.example.audio');
+  // static const platform = MethodChannel('com.example.audio');
 
-  Future<void> changeAudioOutput(String output) async {
-    try {
-      await platform.invokeMethod('changeAudioOutput', {"output": output});
-    } on PlatformException catch (e) {
-      print("Failed to change audio output: ${e.message}");
-    }
-  }
+  // Future<void> changeAudioOutput(String output) async {
+  //   try {
+  //     await platform.invokeMethod('changeAudioOutput', {"output": output});
+  //   } on PlatformException catch (e) {
+  //     print("Failed to change audio output: ${e.message}");
+  //   }
+  // }
 
   @override
   void initState() {
     super.initState();
+    requestMicrophonePermission();
+
+    //final config = new AppleAudioConfiguration(
+    //  appleAudioCategory: AppleAudioCategory.soloAmbient,
+    //  //appleAudioMode: AppleAudioMode.moviePlayback
+    //);
+    //AppleNativeAudioManagement.setAppleAudioConfiguration(config);
   }
 
 
@@ -74,8 +81,8 @@ class _MyInAppWebViewState extends State<MyInAppWebView> {
 
     peerConnection?.onTrack = (RTCTrackEvent e) async {
       var stream = e.streams[0];
-      print("来自Web的消息 onTrack: ${e}");
-
+      print("来自Web的消息 onTrack: ${e} ${DateTime.now().millisecondsSinceEpoch}");
+      _localStream = stream;
       print('Audio tracks: ${stream.getAudioTracks()}');
       for (var track in stream.getAudioTracks()) {
         print('Track enabled: ${track.enabled}');
@@ -83,7 +90,24 @@ class _MyInAppWebViewState extends State<MyInAppWebView> {
         print('Track kind: ${track.kind}');
         print('Track: ${track}');
       }
-      //final RTCVideoRenderer audioRenderer = RTCVideoRenderer();
+
+      //Future.delayed(Duration(seconds: 10), () async {
+      //  print('Audio play start');
+      //  for (var track in stream.getAudioTracks()) {
+      //    print('Track enabled: ${track.enabled}');
+      //    print('Track label: ${track.label}');
+      //    print('Track kind: ${track.kind}');
+      //    print('Track: ${track}');
+      //  }
+
+
+      //  final config = new AppleAudioConfiguration(
+      //    appleAudioCategory: AppleAudioCategory.soloAmbient,
+      //    //appleAudioMode: AppleAudioMode.moviePlayback
+      //  );
+      //  AppleNativeAudioManagement.setAppleAudioConfiguration(config);
+      //});
+      final RTCVideoRenderer audioRenderer = RTCVideoRenderer();
       //_localStream = stream;
       //if (stream.getAudioTracks().isNotEmpty) {
 
@@ -96,7 +120,24 @@ class _MyInAppWebViewState extends State<MyInAppWebView> {
       //}
       //// Do something with the received audio stream
       //// await audioRenderer.initialize();
+      await audioRenderer.initialize();
+      audioRenderer.audioOutput('earpiece');
+      audioRenderer.srcObject = stream;
+      //final RTCVideoRenderer audioRenderer = RTCVideoRenderer();
+      ////_localStream = stream;
+      ////if (stream.getAudioTracks().isNotEmpty) {
+
+      ////  // 获取音频轨
+      ////  MediaStreamTrack audioTrack = stream.getAudioTracks().first;
+      ////  print("来自native的消息 非空: ${audioTrack}");
+
+      ////  // 处理音频轨，例如显示音量条或者创建一个新的 UI 组件
+      ////  // 注意：音频会自动播放，不需要额外的视频或音频组件
+      ////}
+      ////// Do something with the received audio stream
+      ////// await audioRenderer.initialize();
       //await audioRenderer.initialize();
+      //audioRenderer.audioOutput('earpiece');
       //audioRenderer.srcObject = stream;
       //// MediaStreamTrack audioTrack = stream.getAudioTracks().first;
       //// audioTrack.onEnded = void (e) {
@@ -140,32 +181,35 @@ class _MyInAppWebViewState extends State<MyInAppWebView> {
     if (peerConnection == null) {
       await createRTC();
     }
-    print("开始 remoteOffer");
+    print("开始 remoteOffer ${DateTime.now().millisecondsSinceEpoch}");
     RTCSessionDescription description = RTCSessionDescription(
       offer['sdp'],
       offer['type'],
     );
     await peerConnection?.setRemoteDescription(description);
 
-    dynamic answer = await peerConnection?.createAnswer({'offerToReceiveAudio': true, 'offerToReceiveVideo': false});
+    dynamic answer = await peerConnection?.createAnswer({
+      'voiceActivityDetection': false,
+      'iceRestart': false
+    });
     await peerConnection?.setLocalDescription(answer);
     Map<String, dynamic> sessionDescriptionMap = {
       'sdp': answer.sdp,
       'type': answer.type,
     };
+    print("结束 remoteOffer ${answer.sdp} ${DateTime.now().millisecondsSinceEpoch}");
     return sessionDescriptionMap;
-    print("结束 remoteOffer");
   }
 
   void remoteAddIceCandidate(Map candidateJson) async {
-    print("开始 remoteAddIceCandidate");
+    print("开始 remoteAddIceCandidate ${DateTime.now().millisecondsSinceEpoch}");
     RTCIceCandidate candidate = RTCIceCandidate(
       candidateJson['candidate'],
       candidateJson['sdpMid'],
       candidateJson['sdpMLineIndex'],
     );
     await peerConnection?.addCandidate(candidate);
-    print("结束 remoteAddIceCandidate");
+    print("结束 remoteAddIceCandidate ${DateTime.now().millisecondsSinceEpoch}");
   }
 
   @override
@@ -181,21 +225,21 @@ class _MyInAppWebViewState extends State<MyInAppWebView> {
           child: Directionality(
             textDirection: TextDirection.ltr, //或者 TextDirection.rtl，根据你的需求
             child: InAppWebView(
-              initialUrlRequest: URLRequest(url: WebUri("https://echo.amap.test/tech-center/sdk-manage/demo?version=1.0.8&mobile=1")),
+              initialUrlRequest: URLRequest(url: WebUri("https://echo.amap.test/tech-center/sdk-manage/demo?version=2.0.4&mobile=1")),
               //initialUrlRequest: URLRequest(url: Uri.parse("https://agent-5.cticloud.cn/pre-test/webrtc-pre-test.html")),
               initialSettings: InAppWebViewSettings(
-                isInspectable: kDebugMode,
-                mediaPlaybackRequiresUserGesture: false,
-                allowsInlineMediaPlayback: true,
-                iframeAllow: "microphone",
-                iframeAllowFullscreen: true,
-                allowBackgroundAudioPlaying: true
+                // isInspectable: kDebugMode,
+                // mediaPlaybackRequiresUserGesture: false,
+                // allowsInlineMediaPlayback: true,
+                // iframeAllow: "microphone",
+                // iframeAllowFullscreen: true,
+                // allowBackgroundAudioPlaying: true
               ),
-              onPermissionRequest: (controller, request) async {
-                return PermissionResponse(
-                    resources: request.resources,
-                    action: PermissionResponseAction.GRANT);
-              },
+               onPermissionRequest: (controller, request) async {
+                 return PermissionResponse(
+                     resources: request.resources,
+                     action: PermissionResponseAction.GRANT);
+               },
               shouldOverrideUrlLoading: (controller, navigationAction) async {
                 dynamic url = navigationAction.request.url ?? '';
                 if (![
